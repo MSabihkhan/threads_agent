@@ -1,6 +1,7 @@
-# bot.py
 import os 
+import threading
 import dotenv
+from flask import Flask
 from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, ContextTypes
 
@@ -8,6 +9,20 @@ from telegram.ext import Application, MessageHandler, filters, ContextTypes
 from engine import run_
 
 dotenv.load_dotenv()
+
+# --- Flask Server Setup for Render ---
+app = Flask(__name__)
+
+@app.route('/')
+def health_check():
+    return "Bot is active and polling!", 200
+
+def run_health_server():
+    # Render automatically injects a PORT environment variable
+    port = int(os.getenv("PORT", 10000))
+    # host '0.0.0.0' allows external network pings to reach it
+    app.run(host="0.0.0.0", port=port)
+# -------------------------------------
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 1. Grab the message text from Telegram
@@ -18,6 +33,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # 2. Pass the message into your driver pipeline and get the final result
     bot_response = run_(user_text)
+    
     # 3. Send that final response back to the Telegram user
     await update.message.reply_text(bot_response)
 
@@ -28,6 +44,12 @@ def main():
         print("Error: TELEGRAM_BOT_TOKEN missing!")
         return
 
+    # Start the Flask health check server in a daemon thread 
+    # so it does not block python-telegram-bot's own event loop
+    print("Starting Render health check server...")
+    threading.Thread(target=run_health_server, daemon=True).start()
+
+    # Build and start the Telegram bot application
     application = Application.builder().token(TOKEN).build()
     
     # Listen for any text messages
