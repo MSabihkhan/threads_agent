@@ -18,23 +18,43 @@ def post(content: str, image_path: str = None) -> dict:
         if image_path and os.path.exists(image_path):
             print(f"Uploading media: {image_path}")
             upload_result = client.media.upload(image_path)
-            media_url = upload_result["publicUrl"]
-            media_urls.append(media_url)
-            print(f"Media uploaded successfully: {media_url}")
+            
+            # Convert SDK response object to dict if needed
+            if hasattr(upload_result, 'model_dump'):
+                upload_dict = upload_result.model_dump()
+            elif hasattr(upload_result, '__dict__'):
+                upload_dict = upload_result.__dict__
+            else:
+                upload_dict = upload_result
+            
+            # Extract public URL
+            media_url = upload_dict.get("publicUrl") or upload_dict.get("public_url") or upload_dict.get("url")
+            
+            if media_url:
+                media_urls.append(media_url)
+                print(f"Media uploaded successfully: {media_url}")
+            else:
+                print(f"Warning: Could not extract media URL from upload response: {upload_dict}")
         
         # Create post with text and media
-        response = client.posts.create(
-            content=content,
-            media_urls=media_urls if media_urls else None,  # Only add if we have media
-            platforms=[
+        post_params = {
+            "content": content,
+            "platforms": [
                 {
                     "platform": "threads",
                     "accountId": "6a010d4d92b3d8e85fb919dc"
                 }
             ],
-            publish_now=True,
-        )
+            "publish_now": True,
+        }
+        
+        # Only add media_urls if we have any
+        if media_urls:
+            post_params["media_urls"] = media_urls
+        
+        response = client.posts.create(**post_params)
 
+        # Safely convert the SDK response object into a dictionary
         response_dict = response.model_dump()
         post_data = response_dict.get("post", {})
 
@@ -47,6 +67,10 @@ def post(content: str, image_path: str = None) -> dict:
         }
 
     except Exception as e:
+        # Print full error for debugging
+        import traceback
+        print(f"Error details: {traceback.format_exc()}")
+        
         return {
             "success": False,
             "status": "failed",
@@ -59,9 +83,5 @@ if __name__ == "__main__":
     print("--- Text Post Result ---")
     print(f"Success: {result['success']}")
     print(f"Status: {result['status']}")
-    
-    # Test with image (uncomment and add your test image path)
-    # result_with_image = post("Check out this image!", image_path="test_image.jpg")
-    # print("\n--- Image Post Result ---")
-    # print(f"Success: {result_with_image['success']}")
-    # print(f"Has Media: {result_with_image['has_media']}")
+    if not result['success']:
+        print(f"Error: {result['error']}")
