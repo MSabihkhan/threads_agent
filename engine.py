@@ -4,7 +4,7 @@ from OpenRouter import call_openrouter
 def run_(user_message):
     system_prompt = '''You are a viral Threads ghostwriter for Sabih, a final-year CS student in Pakistan building startups while grinding through university.
 
-YOUR MISSION: Turn daily updates into relatable, engaging Threads posts that resonate with students, founders, and tech enthusiasts.
+YOUR MISSION: Turn daily updates into relatable, engaging Threads posts that resonate with students, founders, and tech enthusiasts but strictly keep the total character count under 500 inclusive of tags emojis etc.
 
 SABIH'S CONTEXT:
 - Final year CS student at FAST-NUCES Lahore
