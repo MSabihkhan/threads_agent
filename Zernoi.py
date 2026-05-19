@@ -10,11 +10,22 @@ client = Zernio(
     timeout=30.0,
 )
 
-def post(content: str) -> dict:
+def post(content: str, image_path: str = None) -> dict:
     try:
-        # Publish to multiple platforms with one call
+        media_urls = []
+        
+        # If image is provided, upload it first to get public URL
+        if image_path and os.path.exists(image_path):
+            print(f"Uploading media: {image_path}")
+            upload_result = client.media.upload(image_path)
+            media_url = upload_result["publicUrl"]
+            media_urls.append(media_url)
+            print(f"Media uploaded successfully: {media_url}")
+        
+        # Create post with text and media
         response = client.posts.create(
             content=content,
+            media_urls=media_urls if media_urls else None,  # Only add if we have media
             platforms=[
                 {
                     "platform": "threads",
@@ -24,23 +35,18 @@ def post(content: str) -> dict:
             publish_now=True,
         )
 
-        # Safely convert the SDK response object into a standard Python dictionary
-        # This prevents any "AttributeError" exceptions from strict typing
         response_dict = response.model_dump()
-
-        # Extract the inner post data
-        # Zernio wraps the post data inside a 'post' key in the payload dictionary
         post_data = response_dict.get("post", {})
 
         return {
             "success": True,
-            "id": post_data.get("id") or response_dict.get("id"), # Check both places for ID
+            "id": post_data.get("id") or response_dict.get("id"),
             "status": post_data.get("status", "unknown"),
-            "platforms_count": len(post_data.get("platforms", []))
+            "platforms_count": len(post_data.get("platforms", [])),
+            "has_media": len(media_urls) > 0
         }
 
     except Exception as e:
-        # Handle API errors or connection failures gracefully
         return {
             "success": False,
             "status": "failed",
@@ -48,13 +54,14 @@ def post(content: str) -> dict:
         }
 
 if __name__ == "__main__":    
-    result = post("Hello worlddddd again from Zernio!")
+    # Test with text only
+    result = post("Hello world from Zernio!")
+    print("--- Text Post Result ---")
+    print(f"Success: {result['success']}")
+    print(f"Status: {result['status']}")
     
-    print("--- Post Result ---")
-    print(f"Was successful?: {result['success']}")
-    print(f"Current Status: {result['status']}")
-    
-    if result['success']:
-        print(f"Post ID: {result['id']}")
-    else:
-        print(f"Error Message: {result['error']}")
+    # Test with image (uncomment and add your test image path)
+    # result_with_image = post("Check out this image!", image_path="test_image.jpg")
+    # print("\n--- Image Post Result ---")
+    # print(f"Success: {result_with_image['success']}")
+    # print(f"Has Media: {result_with_image['has_media']}")

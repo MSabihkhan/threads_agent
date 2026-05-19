@@ -5,7 +5,6 @@ from flask import Flask
 from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, ContextTypes
 
-# Import the pipeline function from your driver file
 from engine import run_
 
 dotenv.load_dotenv()
@@ -18,23 +17,43 @@ def health_check():
     return "Bot is active and polling!", 200
 
 def run_health_server():
-    # Render automatically injects a PORT environment variable
     port = int(os.getenv("PORT", 10000))
-    # host '0.0.0.0' allows external network pings to reach it
     app.run(host="0.0.0.0", port=port)
 # -------------------------------------
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # 1. Grab the message text from Telegram
-    user_text = update.message.text
+    # Get text from either message text or photo caption
+    user_text = update.message.caption if update.message.photo else update.message.text
+    image_path = None
     
-    # Optional: Send a typing indicator so the user knows the bot is working
-    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
+    # Check if message contains a photo
+    if update.message.photo:
+        await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="upload_photo")
+        
+        # Get the highest resolution photo (last item in photo array)
+        photo = update.message.photo[-1]
+        
+        # Download the photo to /tmp directory
+        photo_file = await photo.get_file()
+        image_path = f"/tmp/{photo.file_id}.jpg"
+        await photo_file.download_to_drive(image_path)
+        
+        print(f"Photo downloaded to: {image_path}")
+    else:
+        await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
     
-    # 2. Pass the message into your driver pipeline and get the final result
-    bot_response = run_(user_text)
+    # Pass both text and image path to your pipeline
+    # OpenRouter generates the caption, Zernio attaches the image
+    bot_response = run_(user_text, image_path=image_path)
     
-    # 3. Send that final response back to the Telegram user
+    # Clean up the downloaded image after posting
+    if image_path and os.path.exists(image_path):
+        try:
+            os.remove(image_path)
+            print(f"Cleaned up temporary file: {image_path}")
+        except Exception as e:
+            print(f"Failed to clean up {image_path}: {e}")
+    
     await update.message.reply_text(bot_response)
 
 
@@ -44,18 +63,18 @@ def main():
         print("Error: TELEGRAM_BOT_TOKEN missing!")
         return
 
-    # Start the Flask health check server in a daemon thread 
-    # so it does not block python-telegram-bot's own event loop
     print("Starting Render health check server...")
     threading.Thread(target=run_health_server, daemon=True).start()
 
-    # Build and start the Telegram bot application
     application = Application.builder().token(TOKEN).build()
     
-    # Listen for any text messages
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    # Listen for both text messages AND photos with captions
+    application.add_handler(MessageHandler(
+        (filters.TEXT | filters.PHOTO) & ~filters.COMMAND, 
+        handle_message
+    ))
     
-    print("Telegram Bot is running and listening for messages...")
+    print("Telegram Bot is running and listening for messages and photos...")
     application.run_polling()
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 from Zernoi import post 
 from OpenRouter import call_openrouter
 
-def run_(user_message):
+def run_(user_message, image_path=None):
     system_prompt = '''You are a viral Threads ghostwriter for Sabih, a final-year CS student in Pakistan building startups while grinding through university.
 
 YOUR MISSION: Turn daily updates into relatable, engaging Threads posts that resonate with students, founders, and tech enthusiasts but strictly keep the total character count under 500 inclusive of tags emojis etc.
@@ -77,7 +77,7 @@ Output: "Just added AR menu previews to Menuva. Point your phone at the menu, se
 
 Output ONLY the Threads post. No explanations. No preambles. Just the post text.'''
     
-    # 1. Get the text back from the AI
+    # 1. Get the text back from the AI (OpenRouter works with text only, which is what we want)
     ai_response = call_openrouter(system_prompt, user_message)
     print(f"AI response: {ai_response}")
     
@@ -86,20 +86,23 @@ Output ONLY the Threads post. No explanations. No preambles. Just the post text.
         print("AI failed to generate a valid post text.")
         return "Post failed: AI generation error."
         
-    # 3. Pass it to your post function
+    # 3. Pass AI-generated text AND the image (as-is) to Zernio
     print("AI generated text successfully. Attempting to post to Zernoi...")
-    response = post(ai_response)
+    if image_path:
+        print(f"Attaching image: {image_path}")
+    
+    response = post(ai_response, image_path=image_path)
     print(f"Zernoi response: {response}")
     
-    # 4. FIX: Check 'success' directly since Zernoi explicitly provides it
+    # 4. Check success
     if response.get('success') is True:
-        # Safely extract status for printing logs
         status_val = response.get('status')
-        print(f"Post successful! ID: {response.get('id')}, Status: {status_val}")
+        has_media = response.get('has_media', False)
+        media_info = " (with image)" if has_media else ""
+        print(f"Post successful{media_info}! ID: {response.get('id')}, Status: {status_val}")
         
-        reply = f"Post successful!\n\n{ai_response}"
+        reply = f"Post successful{media_info}!\n\n{ai_response}"
     else:
-        # Handles cases where success is False or missing entirely
         error_msg = response.get('error', 'Unknown error')
         print(f"Post failed. Error: {error_msg}")
         reply = f"Post failed: {error_msg}"
